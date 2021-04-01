@@ -4,39 +4,44 @@ library(readr)
 library(lubridate)
 
 # Set variables
-end_date = "2021/03/01"
+end_date = "2022/02/01"
 duration = 60
 start_date = ymd(end_date) - months(duration)
 
-# Load data
-Starter_Annual_Flatline <- read_csv("C:/Users/FrixosLarkos/OneDrive - FE International/Hunter.io/Financials/Metrics/Manual Metrics/Current/Annual/Flatline CSVs/Starter Annual - Flatline.csv", 
-                                    col_types = cols(Date = col_date(format = "%d/%m/%Y"), 
-                                                     Date_Accrual = col_date(format = "%d/%m/%Y")))
+# Load Annual data
+Annual_Data <- read_csv("C:/Users/FrixosLarkos/OneDrive - FE International/Hunter.io/Financials/Metrics/Manual Metrics/vMarch/FL/All _annual_converted_flatline.csv",
+                        col_types = cols(Date = col_date(format = "%d/%m/%Y"),
+                                         Date_Accrual = col_date(format = "%d/%m/%Y"))) %>% 
+  select(customer_email, seller_message, status, Period, Date_Accrual, Accrual_Amount, Plan)
+
+# Load Monthly data
+Monthly_Data <- read_csv("C:/Users/FrixosLarkos/OneDrive - FE International/Hunter.io/Financials/Metrics/Manual Metrics/vMarch/FL/All_monthly_csv.csv",
+                         col_types = cols(date = col_date(format = "%d/%m/%Y"))) %>%
+  mutate(Date_Accrual = ymd(paste0(year(date),"-",month(date),"-",1))) %>% 
+  select(customer_email, seller_message, status, Period, Date_Accrual, Accrual_Amount=net_converted_amount, Plan)
+
+
+# Merge Annual and Monthly data
+Merged_Data <- Annual_Data %>% 
+  bind_rows(Monthly_Data)
 
 # Select relevant variables only (for simplification)
-Select_Data <- Starter_Annual_Flatline %>% 
-  select(customer_email, seller_message, status, Annual.Monthly..Hardcoded., Date_Accrual, Accrual_Amount) %>% 
+Select_Data <- Merged_Data %>% 
   filter(status == "Paid")
-
-
-
-
 
 # Mutate data into appropriate format to calculate the desired metrics
 MRR <- Select_Data %>%
-  mutate(Year = year(Date_Accrual),
-         Month = month(Date_Accrual)) %>% 
-  group_by(customer_email, Year, Month) %>% 
-  summarise(MRR = sum(Accrual_Amount))
+ mutate(Year = year(Date_Accrual),
+        Month = month(Date_Accrual)) %>% 
+ group_by(customer_email, Year, Month) %>% 
+ summarise(MRR = sum(Accrual_Amount))
 
-Churn_MRR <- Select_Data %>%
-  group_by(customer_email)
-  mutate(Lag_Accrual_Amount = lag(Accrual_Amount),
-         Churn_Amount = if_else(Accrual_Amount == 0, Lag_Accrual_Amount - Accrual_month,0)) %>% 
-  group_by(year(Date_Accrual), month(Date_Accrual)) %>% 
-  summarise(MRR = sum(Churn_Amount))
-
-
+#Churn_MRR <- Select_Data %>%
+# group_by(customer_email)
+# mutate(Lag_Accrual_Amount = lag(Accrual_Amount),
+#        Churn_Amount = if_else(Accrual_Amount == 0, Lag_Accrual_Amount - Accrual_month,0)) %>% 
+# group_by(year(Date_Accrual), month(Date_Accrual)) %>% 
+# summarise(MRR = sum(Churn_Amount))
 
 
 # Create an empty dataframe with the appropriate names and dates to join mutated data into
@@ -65,12 +70,35 @@ Joint_Data <- Expanded_Data %>%
   mutate(lag_MRR = lead(MRR),
          lag_MRR = if_else(is.na(lag_MRR), 0, lag_MRR),
          Churn_Amount = if_else(MRR == 0, lag_MRR - MRR, 0),
-         Upgrade_Amount = if_else(MRR > lag_MRR, MRR - lag_MRR, 0),
-         Downgrade_Amount = if_else(MRR < lag_MRR, lag_MRR - MRR, 0),
+         Upgrade_Amount = if_else(lag_MRR == 0, 0,if_else(MRR > lag_MRR, MRR - lag_MRR, 0)),
+         Downgrade_Amount = if_else(MRR == 0, 0,if_else(MRR < lag_MRR, lag_MRR - MRR, 0)),
          Count = if_else(MRR > 0, 1, 0),
-         Churn_Customers = if_else(Count == 0, lag_MRR - MRR, 0))
+         Churn_Customers = if_else(Count == 0, lead(Count) - Count, 0)) %>%
+  ungroup() %>% 
+  group_by(Year, Month) %>% 
+  summarise(MRR = sum(MRR),
+            Churn_MRR = sum(Churn_Amount),
+            MRR_Upgrade = sum(Upgrade_Amount),
+            MRR_Downgrade = sum(Downgrade_Amount),
+            Total_Customers = sum(Count),
+            Churn_Customers = sum(Churn_Customers)) %>%
+  ungroup() %>% 
+  mutate(ARR = MRR*12,
+         Total_Churn = Churn_MRR + MRR_Downgrade - MRR_Upgrade,
+         MRR_Churn_Rate = Total_Churn / lag(MRR),
+         Customer_Churn_Rate = Churn_Customers / lag(Total_Customers),
+         ARPU = MRR / Total_Customers,
+         CLV = ARPU / Customer_Churn_Rate,
+         ARPU = if_else(is.na(ARPU), 0, ARPU),
+         CLV = if_else(is.na(CLV), 0, if_else(is.infinite(CLV), MRR, CLV)),
+         Customer_Churn_Rate = if_else(is.na(Customer_Churn_Rate), 0, Customer_Churn_Rate),
+         MRR_Churn_Rate = if_else(is.na(MRR_Churn_Rate), 0, MRR_Churn_Rate))
+
+write.csv(Joint_Data, "All_All.csv", row.names = FALSE)
 
 # Plan:
+# Custom, Enterprise, Total
+# 
 # 1) Import flatlined Annual transactions
 # 2) Import monthly transactions
 # 3) Unify all data into a single data frame
