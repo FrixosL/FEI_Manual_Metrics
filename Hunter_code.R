@@ -4,18 +4,18 @@ library(readr)
 library(lubridate)
 
 # Set variables
-end_date = "2022/02/01"
+end_date = "2022/03/01"
 duration = 60
 start_date = ymd(end_date) - months(duration)
 
 # Load Annual data
-Annual_Data <- read_csv("C:/Users/FrixosLarkos/OneDrive - FE International/Hunter.io/Financials/Metrics/Manual Metrics/vMarch/FL/All _annual_converted_flatline.csv",
+Annual_Data <- read_csv("C:/Users/FrixosLarkos/Downloads/Annual Plans vMay.csv",
                         col_types = cols(Date = col_date(format = "%d/%m/%Y"),
                                          Date_Accrual = col_date(format = "%d/%m/%Y"))) %>% 
   select(customer_email, seller_message, status, Period, Date_Accrual, Accrual_Amount, Plan)
 
 # Load Monthly data
-Monthly_Data <- read_csv("C:/Users/FrixosLarkos/OneDrive - FE International/Hunter.io/Financials/Metrics/Manual Metrics/vMarch/FL/All_monthly_csv.csv",
+Monthly_Data <- read_csv("C:/Users/FrixosLarkos/Downloads/Monthly Plans vMay.csv",
                          col_types = cols(date = col_date(format = "%d/%m/%Y"))) %>%
   mutate(Date_Accrual = ymd(paste0(year(date),"-",month(date),"-",1))) %>% 
   select(customer_email, seller_message, status, Period, Date_Accrual, Accrual_Amount=net_converted_amount, Plan)
@@ -27,7 +27,9 @@ Merged_Data <- Annual_Data %>%
 
 # Select relevant variables only (for simplification)
 Select_Data <- Merged_Data %>% 
-  filter(status == "Paid")
+  filter(status == "Paid",
+         Period == "Monthly",
+         Plan == "Enterprise")
 
 # Mutate data into appropriate format to calculate the desired metrics
 MRR <- Select_Data %>%
@@ -94,7 +96,7 @@ Joint_Data <- Expanded_Data %>%
          Customer_Churn_Rate = if_else(is.na(Customer_Churn_Rate), 0, Customer_Churn_Rate),
          MRR_Churn_Rate = if_else(is.na(MRR_Churn_Rate), 0, MRR_Churn_Rate))
 
-write.csv(Joint_Data, "All_All.csv", row.names = FALSE)
+write.csv(Joint_Data, "Monthly_Enterprise.csv", row.names = FALSE)
 
 # Plan:
 # Custom, Enterprise, Total
