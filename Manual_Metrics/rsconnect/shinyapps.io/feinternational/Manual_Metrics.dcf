@@ -1,0 +1,13 @@
+name: Manual_Metrics
+title: Manual_Metrics
+username:
+account: feinternational
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 4243764
+bundleId: 4701367
+url: https://feinternational.shinyapps.io/Manual_Metrics/
+when: 1623335247.1662
+lastSyncTime: 1623335247.1662
+asMultiple: FALSE
+asStatic: FALSE
